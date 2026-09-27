@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime
 from supabase import create_client, Client
 from telegram import Update
@@ -5,7 +6,7 @@ from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTyp
 
 # --- ตั้งค่า Supabase และ Token บอทกะเช้า ---
 SUPABASE_URL = "https://gxqztvcwamchihnqplin.supabase.co"
-SUPABASE_KEY = "sb_publishable_lnQnwygZZvi6orL46p9okA_gO0irVDQ" # ใช้ Publishable Key ของคุณ
+SUPABASE_KEY = "sb_publishable_lnQnwygZZvi6orL46p9okA_gO0irVDQ"
 TOKEN = "8882935399:AAENBHOdga_6B6Zlu_AFhqVRQtF-OB7ilzQ"
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -131,4 +132,6 @@ if __name__ == '__main__':
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     print("Morning Shift Bot is running...")
-    app.run_polling()
+    
+    # ปรับปรุงให้รองรับ Event Loop บนคลาวด์รุ่นใหม่
+    asyncio.run(app.run_polling())
