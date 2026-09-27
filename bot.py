@@ -133,5 +133,5 @@ if __name__ == '__main__':
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     print("Morning Shift Bot is running...")
     
-    # ปรับปรุงให้รองรับ Event Loop บนคลาวด์รุ่นใหม่
-    asyncio.run(app.run_polling())
+    # รันด้วยวิธีปกติของ python-telegram-bot
+    app.run_polling()
