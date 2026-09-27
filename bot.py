@@ -1,4 +1,6 @@
-import asyncio
+import os
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from datetime import datetime
 from supabase import create_client, Client
 from telegram import Update
@@ -14,6 +16,20 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 GROUP_CHAT_ID = None
 BREAK_TYPES = {"ห้องน้ำ": 15, "ดูดบุหรี่": 10, "กินข้าว": 30, "ซื้อของ": 30}
 RETURN_COMMANDS = ["กลับ", "มาค่ะ", "มาครับ", "เข้า"]
+
+# --- ฟังก์ชันจำลอง Web Server สำหรับ Render (ฟรีแพลน) ---
+def run_dummy_server():
+    port = int(os.environ.get("PORT", 10000))
+    class SimpleHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"Bot is alive!")
+        def log_message(self, format, *args):
+            pass # ปิด Log HTTP ยุ่บยั่บ
+            
+    server = HTTPServer(("0.0.0.0", port), SimpleHandler)
+    server.serve_forever()
 
 def get_work_date():
     """คำนวณรอบวันของกะเช้า (ใช้วันปัจจุบันตามปฏิทิน)"""
@@ -129,9 +145,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"⏳ รหัส {emp_id} เริ่มเบรค {action} ({dur} นาที)")
 
 if __name__ == '__main__':
+    # เปิด Web Server จำลองในเบื้องหลังเพื่อให้ Render ผ่านการเช็ค Port และรันฟรีได้
+    server_thread = threading.Thread(target=run_dummy_server, daemon=True)
+    server_thread.start()
+
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     print("Morning Shift Bot is running...")
     
-    # รันด้วยวิธีปกติของ python-telegram-bot
     app.run_polling()
