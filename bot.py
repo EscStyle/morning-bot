@@ -17,10 +17,8 @@ GROUP_CHAT_ID = None
 BREAK_TYPES = {"ห้องน้ำ": 15, "ดูดบุหรี่": 10, "กินข้าว": 30, "ซื้อของ": 30}
 RETURN_COMMANDS = ["กลับ", "มาค่ะ", "มาครับ", "เข้า"]
 
-# --- กำหนดโซนเวลาประเทศไทย (UTC+7) ---
 TH_TIMEZONE = timezone(timedelta(hours=7))
 
-# --- ฟังก์ชันจำลอง Web Server สำหรับ Render (ฟรีแพลน) ---
 def run_dummy_server():
     port = int(os.environ.get("PORT", 10000))
     class SimpleHandler(BaseHTTPRequestHandler):
@@ -29,13 +27,12 @@ def run_dummy_server():
             self.end_headers()
             self.wfile.write(b"Bot is alive!")
         def log_message(self, format, *args):
-            pass # ปิด Log HTTP ยุ่บยั่บ
+            pass
             
     server = HTTPServer(("0.0.0.0", port), SimpleHandler)
     server.serve_forever()
 
 def get_work_date():
-    """คำนวณรอบวันตามเวลาประเทศไทย"""
     return datetime.now(TH_TIMEZONE).strftime("%Y-%m-%d")
 
 def get_or_create_employee(emp_id, work_date):
@@ -62,7 +59,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
     current_date = get_work_date()
 
-    # 1. พิมพ์คำว่า "สรุป" เพื่อดูรายงานของทุกคน
     if text == "สรุป":
         summary_text = f"📊 **สรุปยอดกะเช้า ({current_date})**\n----------------------------------------\n"
         emp_res = supabase.table("employee_data").select("*").eq("work_date", current_date).execute()
@@ -89,7 +85,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = get_or_create_employee(emp_id, current_date)
     quota_left = data["quota_total"] - data["quota_used"]
 
-    # 2. ขอสรุปเฉพาะบุคคล (เช่น "01 สรุป")
     if action == "สรุป":
         active_res = supabase.table("active_breaks").select("break_type").eq("emp_id", emp_id).execute()
         status = f"⏳ กำลังเบรค ({active_res.data[0]['break_type']})" if active_res.data else "🟢 ทำงานปกติ"
@@ -99,7 +94,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # 3. แจ้งกลับเข้าทำงาน (เช่น "01 กลับ")
+    # แจ้งกลับเข้าทำงาน (แสดงข้อมูลครบถ้วน)
     if action in RETURN_COMMANDS:
         active_res = supabase.table("active_breaks").select("*").eq("emp_id", emp_id).execute()
         if not active_res.data:
@@ -122,10 +117,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         }).execute()
         supabase.table("active_breaks").delete().eq("emp_id", emp_id).execute()
         
-        await update.message.reply_text(f"🏁 รหัส {emp_id} กลับมาแล้ว ใช้เวลา {elapsed} นาที (เหลือโควตา {60 - new_used} นาที)")
+        return_msg = (
+            f"🏁 รหัส {emp_id} กลับเข้าทำงานแล้ว\n"
+            f"• เวลาเข้า: {now_time.strftime('%H:%M:%S')} น.\n"
+            f"• ใช้เวลาครั้งนี้: {elapsed} นาที (กำหนด {info['allowed_mins']} นาที)\n"
+            f"📊 สรุปยอดวันนี้ (รอบวันที่ {current_date}):\n"
+            f"- ใช้ไปรวม: {new_used} นาที\n"
+            f"- โควตาคงเหลือ: {data['quota_total'] - new_used} นาที"
+        )
+        await update.message.reply_text(return_msg)
         return
 
-    # 4. เริ่มเบรค (เช่น "01 ห้องน้ำ", "01 กินข้าว")
     if action in BREAK_TYPES:
         active_res = supabase.table("active_breaks").select("*").eq("emp_id", emp_id).execute()
         if active_res.data:
@@ -150,7 +152,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "break_type": action
         }).execute()
         
-        # แสดงเวลาตรงตามเวลาไทย
         reply_msg = (
             f"⏳ รหัส {emp_id} เริ่มเบรค {action}\n"
             f"• เวลาที่ได้: {dur} นาที\n"
@@ -162,12 +163,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(reply_msg)
 
 if __name__ == '__main__':
-    # เปิด Web Server จำลองในเบื้องหลังเพื่อให้ Render ผ่านการเช็ค Port และรันฟรีได้
     server_thread = threading.Thread(target=run_dummy_server, daemon=True)
     server_thread.start()
 
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     print("Morning Shift Bot is running...")
-    
     app.run_polling()
