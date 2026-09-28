@@ -82,14 +82,13 @@ def get_personal_summary_text(emp_id, current_date):
 def run_background_tasks():
     global GROUP_CHAT_ID
     sent_today = None
-    notified_overtime = set() # ป้องกันการแจ้งเตือนซ้ำสำหรับคนเดิมในเบรคครั้งนั้นๆ
+    notified_overtime = set()
 
     while True:
         try:
             now = datetime.now(TH_TIMEZONE)
             current_date = now.strftime("%Y-%m-%d")
             
-            # 1. ตรวจสอบการแจ้งเตือนเบรคเกินเวลาทุกๆ 1 นาที
             if GROUP_CHAT_ID:
                 active_res = supabase.table("active_breaks").select("*").execute()
                 if active_res.data:
@@ -102,7 +101,6 @@ def run_background_tasks():
                         elapsed_seconds = (now - start_time).total_seconds()
                         elapsed_mins = elapsed_seconds / 60
                         
-                        # หากเวลาผ่านไปมากกว่าที่กำหนด และยังไม่ได้แจ้งเตือน
                         if elapsed_mins > allowed_mins and emp_id not in notified_overtime:
                             over_mins = int(elapsed_mins - allowed_mins)
                             alert_msg = (
@@ -117,13 +115,11 @@ def run_background_tasks():
                             requests.post(url, json={"chat_id": GROUP_CHAT_ID, "text": alert_msg, "parse_mode": "Markdown"})
                             notified_overtime.add(emp_id)
 
-                # รีเซ็ตสถานะแจ้งเตือนหากพนักงานกลับเข้าทำงานแล้ว (ไม่อยู่ใน active_breaks)
                 active_emp_ids = {i["emp_id"] for i in (active_res.data or [])}
                 for emp_id in list(notified_overtime):
                     if emp_id not in active_emp_ids:
                         notified_overtime.remove(emp_id)
 
-            # 2. ส่งสรุปอัตโนมัติเวลา 18:00 น. (สิ้นสุดกะเช้า)
             if now.hour == 18 and now.minute == 0:
                 if sent_today != current_date and GROUP_CHAT_ID:
                     emp_res = supabase.table("employee_data").select("*").eq("work_date", current_date).execute()
@@ -189,6 +185,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         emp_id, action = parts[0], parts[1]
         data = get_or_create_employee(emp_id, current_date)
+
+        # เพิ่มระบบเช็คสถานะด่วนตามรูปแบบที่ต้องการ
+        if action == "เช็ค":
+            quota_left = data["quota_total"] - data["quota_used"]
+            check_msg = (
+                f"📊 รายงานสถานะเบรค\n"
+                f"👤 รหัสพนักงาน: {emp_id}\n"
+                f"⏰ ช่วงเวลา: กะเช้า (A)\n"
+                f"⏳ โควตาเวลาคงเหลือ: {quota_left} / {data['quota_total']} นาที\n"
+                f"🍽️ สิทธิ์กินข้าว/ซื้อของ: {data['meal_used']} / 2 ครั้ง"
+            )
+            await update.message.reply_text(check_msg)
+            return
 
         if action == "สรุป":
             report = get_personal_summary_text(emp_id, current_date)
