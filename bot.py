@@ -82,6 +82,7 @@ def run_auto_summary():
             now = datetime.now(TH_TIMEZONE)
             current_date = now.strftime("%Y-%m-%d")
             
+            # ส่งสรุปอัตโนมัติเวลา 18:00 น. (สิ้นสุดกะเช้า)
             if now.hour == 18 and now.minute == 0:
                 if sent_today != current_date and GROUP_CHAT_ID:
                     emp_res = supabase.table("employee_data").select("*").eq("work_date", current_date).execute()
