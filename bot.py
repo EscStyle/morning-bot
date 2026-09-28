@@ -38,9 +38,13 @@ def run_dummy_server():
     server.serve_forever()
 
 def get_personal_summary_text(emp_id, current_date):
+    # แปลงวันที่จาก YYYY-MM-DD เป็น DD/MM/YY
+    date_obj = datetime.strptime(current_date, "%Y-%m-%d")
+    date_str = date_obj.strftime("%d/%m/%y")
+
     data_res = supabase.table("employee_data").select("*").eq("emp_id", emp_id).eq("work_date", current_date).execute()
     if not data_res.data:
-        return f"❌ ยังไม่มีข้อมูลการเบรคของรหัส {emp_id} ในวันนี้"
+        return f"❌ ยังไม่มีข้อมูลการเบรคของรหัส {emp_id} ในวันที่ {date_str}"
     
     d = data_res.data[0]
     quota_total = d["quota_total"]
@@ -83,7 +87,7 @@ def get_personal_summary_text(emp_id, current_date):
         status_text = "ผิดปกติ / " + "\n  ".join(status_parts)
 
     report = (
-        f"📝 **ใบสรุปประวัติการใช้สิทธิ์หักเบรค (Personal Break Report)**\n"
+        f"📝 **ใบสรุปประวัติการใช้สิทธิ์หักเบรค ({date_str})**\n"
         f"----------------------------------------\n"
         f"🔹 รหัสพนักงาน: `{emp_id}` 🔹 ประจำกะ: รอบกะเช้า (A)\n"
         f"----------------------------------------\n"
@@ -169,7 +173,7 @@ def get_or_create_employee(emp_id, work_date):
             "emp_id": emp_id, 
             "work_date": work_date, 
             "shift": "กะเช้า (ก(A))", 
-            "quota_total": 90,  # ตั้งค่าโควตารวมกะเช้าเป็น 90 นาที
+            "quota_total": 90, 
             "quota_used": 0, 
             "meal_used": 0, 
             "meal_total": 2
