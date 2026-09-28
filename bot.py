@@ -38,7 +38,6 @@ def run_dummy_server():
     server.serve_forever()
 
 def get_personal_summary_text(emp_id, current_date):
-    # แปลงวันที่จาก YYYY-MM-DD เป็น DD/MM/YY
     date_obj = datetime.strptime(current_date, "%Y-%m-%d")
     date_str = date_obj.strftime("%d/%m/%y")
 
@@ -51,6 +50,7 @@ def get_personal_summary_text(emp_id, current_date):
     quota_used = d["quota_used"]
     quota_left = quota_total - quota_used
     meal_used = d["meal_used"]
+    shift_name = d.get("shift", "รอบกะเช้า (A)")
     
     hist_res = supabase.table("break_history").select("*").eq("emp_id", emp_id).eq("work_date", current_date).execute()
     
@@ -66,30 +66,29 @@ def get_personal_summary_text(emp_id, current_date):
             else:
                 break_summary[b_type] = b_mins
 
-            # ตรวจสอบการเกินกำหนดรายครั้ง
+            # ตรวจสอบการเกินกำหนดรายครั้งทุกประเภทเบรค
             allowed_limit = BREAK_TYPES.get(b_type, 0)
-            if b_mins > allowed_limit:
+            if allowed_limit > 0 and b_mins > allowed_limit:
                 over = b_mins - allowed_limit
                 violations.append(f"• {b_type} เกินกำหนด {over} นาที (ใช้ไป {b_mins} / กำหนด {allowed_limit})")
 
     history_str = ", ".join([f"{k}: {v} นาที" for k, v in break_summary.items()])
 
-    # เช็คเงื่อนไขสถานะ
     status_parts = []
     if quota_used > quota_total:
-        status_parts.append(f"ใช้โควตารวมเกินกำหนดไป {quota_used - quota_total} นาที")
+        status_parts.append(f"• ใช้โควตารวมเกินกำหนดไป {quota_used - quota_total} นาที")
     if violations:
         status_parts.extend(violations)
 
     if not status_parts:
         status_text = "ปกติ / เป็นไปตามระเบียบของบริษัท"
     else:
-        status_text = "ผิดปกติ / " + "\n  ".join(status_parts)
+        status_text = "ผิดปกติ /\n" + "\n".join(status_parts)
 
     report = (
         f"📝 **ใบสรุปประวัติการใช้สิทธิ์หักเบรค ({date_str})**\n"
         f"----------------------------------------\n"
-        f"🔹 รหัสพนักงาน: `{emp_id}` 🔹 ประจำกะ: รอบกะเช้า (A)\n"
+        f"🔹 รหัสพนักงาน: `{emp_id}` 🔹 ประจำกะ: {shift_name}\n"
         f"----------------------------------------\n"
         f"⏱️ **สรุปเวลา:**\n"
         f"• โควตาตั้งต้น: {quota_total} นาที\n"
