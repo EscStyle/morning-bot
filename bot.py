@@ -41,7 +41,8 @@ def get_personal_summary_text(emp_id, current_date):
     date_obj = datetime.strptime(current_date, "%Y-%m-%d")
     date_str = date_obj.strftime("%d/%m/%y")
 
-    data_res = supabase.table("employee_data").select("*").eq("emp_id", emp_id).eq("work_date", current_date).execute()
+    # ใช้ตาราง _morning
+    data_res = supabase.table("employee_data_morning").select("*").eq("emp_id", emp_id).eq("work_date", current_date).execute()
     if not data_res.data:
         return f"❌ ยังไม่มีข้อมูลการเบรคของรหัส {emp_id} ในวันที่ {date_str}"
     
@@ -51,7 +52,8 @@ def get_personal_summary_text(emp_id, current_date):
     quota_left = quota_total - quota_used
     meal_used = d["meal_used"]
     
-    hist_res = supabase.table("break_history").select("*").eq("emp_id", emp_id).eq("work_date", current_date).execute()
+    # ใช้ตาราง _morning
+    hist_res = supabase.table("break_history_morning").select("*").eq("emp_id", emp_id).eq("work_date", current_date).execute()
     
     break_summary = {
         "กินข้าว/ซื้อของ": {"count": meal_used, "mins": 0},
@@ -131,10 +133,11 @@ def run_background_tasks():
     while True:
         try:
             now = datetime.now(TH_TIMEZONE)
-            current_date = now.strftime("%Y-%m-%d") # กะเช้าใช้วันที่ปัจจุบันตามปฏิทิน
+            current_date = now.strftime("%Y-%m-%d")
             
             if GROUP_CHAT_ID:
-                active_res = supabase.table("active_breaks").select("*").execute()
+                # ใช้ตาราง _morning
+                active_res = supabase.table("active_breaks_morning").select("*").execute()
                 if active_res.data:
                     for info in active_res.data:
                         emp_id = info["emp_id"]
@@ -148,7 +151,7 @@ def run_background_tasks():
                         if elapsed_mins > allowed_mins and emp_id not in notified_overtime:
                             over_mins = int(elapsed_mins - allowed_mins)
                             alert_msg = (
-                                f"🚨 **แจ้งเตือน! พนักงานเบรคเกินเวลา** 🚨\n"
+                                f"🚨 **แจ้งเตือน! พนักงานเบรคเกินเวลา (กะเช้า)** 🚨\n"
                                 f"----------------------------------------\n"
                                 f"🔹 รหัสพนักงาน: `{emp_id}`\n"
                                 f"• ประเภทเบรค: {break_type} (กำหนด {allowed_mins} นาที)\n"
@@ -167,7 +170,7 @@ def run_background_tasks():
             # สรุปยอดอัตโนมัติหลังเลิกงานเวลา 18:00 น.
             if now.hour == 18 and now.minute == 0:
                 if sent_today != current_date and GROUP_CHAT_ID:
-                    emp_res = supabase.table("employee_data").select("*").eq("work_date", current_date).execute()
+                    emp_res = supabase.table("employee_data_morning").select("*").eq("work_date", current_date).execute()
                     
                     if not emp_res.data:
                         summary_text = f"📊 **สรุปยอดกะเช้าประจำวัน ({current_date})**\n----------------------------------------\n❌ ยังไม่มีข้อมูลการเบรคในวันนี้"
@@ -187,10 +190,11 @@ def run_background_tasks():
 
 def get_work_date():
     now = datetime.now(TH_TIMEZONE)
-    return now.strftime("%Y-%m-%d") # กะเช้าใช้วันที่ปัจจุบัน
+    return now.strftime("%Y-%m-%d")
 
 def get_or_create_employee(emp_id, work_date):
-    res = supabase.table("employee_data").select("*").eq("emp_id", emp_id).eq("work_date", work_date).execute()
+    # ใช้ตาราง _morning
+    res = supabase.table("employee_data_morning").select("*").eq("emp_id", emp_id).eq("work_date", work_date).execute()
     if not res.data:
         new_data = {
             "emp_id": emp_id, 
@@ -201,7 +205,7 @@ def get_or_create_employee(emp_id, work_date):
             "meal_used": 0, 
             "meal_total": 2
         }
-        supabase.table("employee_data").insert(new_data).execute()
+        supabase.table("employee_data_morning").insert(new_data).execute()
         return new_data
     return res.data[0]
 
@@ -216,7 +220,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         current_date = get_work_date()
 
         if text == "สรุป":
-            emp_res = supabase.table("employee_data").select("*").eq("work_date", current_date).execute()
+            emp_res = supabase.table("employee_data_morning").select("*").eq("work_date", current_date).execute()
             if not emp_res.data:
                 await update.message.reply_text(f"📊 **สรุปยอดกะเช้า ({current_date})**\n----------------------------------------\n❌ ยังไม่มีข้อมูลการเบรค", parse_mode="Markdown")
                 return
@@ -250,7 +254,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         if action in RETURN_COMMANDS:
-            active_res = supabase.table("active_breaks").select("*").eq("emp_id", emp_id).execute()
+            active_res = supabase.table("active_breaks_morning").select("*").eq("emp_id", emp_id).execute()
             if not active_res.data:
                 await update.message.reply_text(f"รหัส {emp_id} ยังไม่ได้เริ่มเบรค")
                 return
@@ -266,15 +270,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             new_used = data["quota_used"] + elapsed_mins_for_quota
             
-            supabase.table("employee_data").update({"quota_used": new_used}).eq("emp_id", emp_id).eq("work_date", current_date).execute()
-            supabase.table("break_history").insert({
+            supabase.table("employee_data_morning").update({"quota_used": new_used}).eq("emp_id", emp_id).eq("work_date", current_date).execute()
+            supabase.table("break_history_morning").insert({
                 "emp_id": emp_id, 
                 "work_date": current_date, 
                 "break_type": info["break_type"], 
                 "used_mins": elapsed_mins_for_quota, 
                 "time_range": f"{start_time.strftime('%H:%M')} - {now_time.strftime('%H:%M')}"
             }).execute()
-            supabase.table("active_breaks").delete().eq("emp_id", emp_id).execute()
+            supabase.table("active_breaks_morning").delete().eq("emp_id", emp_id).execute()
             
             allowed = info["allowed_mins"]
             overtime_line = ""
@@ -293,7 +297,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         if action in BREAK_TYPES:
-            active_res = supabase.table("active_breaks").select("*").eq("emp_id", emp_id).execute()
+            active_res = supabase.table("active_breaks_morning").select("*").eq("emp_id", emp_id).execute()
             if active_res.data:
                 await update.message.reply_text(f"รหัส {emp_id} กำลังเบรคอยู่")
                 return
@@ -304,12 +308,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await update.message.reply_text(f"❌ ใช้สิทธิ์ข้าวครบ 2 ครั้งแล้วสำหรับกะเช้า")
                     return
                 meal_used += 1
-                supabase.table("employee_data").update({"meal_used": meal_used}).eq("emp_id", emp_id).eq("work_date", current_date).execute()
+                supabase.table("employee_data_morning").update({"meal_used": meal_used}).eq("emp_id", emp_id).eq("work_date", current_date).execute()
             
             now_time = datetime.now(TH_TIMEZONE)
             due_time = now_time + timedelta(minutes=dur)
             
-            supabase.table("active_breaks").upsert({
+            supabase.table("active_breaks_morning").upsert({
                 "emp_id": emp_id, 
                 "start_time": now_time.isoformat(), 
                 "allowed_mins": dur, 
